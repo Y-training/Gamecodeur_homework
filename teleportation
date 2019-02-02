@@ -1,0 +1,251 @@
+-- Cette ligne permet d'afficher des traces dans la console pendant l'éxécution
+io.stdout:setvbuf('no')
+
+-- Empèche Love de filtrer les contours des images quand elles sont redimentionnées
+-- Indispensable pour du pixel art
+love.graphics.setDefaultFilter("nearest")
+local scaleZoom = 4
+
+-- Cette ligne permet de déboguer pas à pas dans ZeroBraneStudio
+if arg[#arg] == "-debug" then require("mobdebug").start() end
+
+local Kirk = {}
+Kirk.isBeam = false
+Kirk.beamLevel = 100
+Kirk.beamRange = 30
+Kirk.beamRate = 5
+Kirk.beamDelay = 0
+Kirk.beamDelayMax = 5
+Kirk.auraLevel = 10
+Kirk.Aura = false
+Kirk.image = nil
+Kirk.x = 0
+Kirk.y = 0
+Kirk.keyPressed = false
+
+local sndTeleportation = love.audio.newSource("voyager_transporter.wav","static")
+
+function love.load()
+  
+  -- Couleur de fond "bleu"
+  love.graphics.setBackgroundColor(101/255,117/255,166/255)
+  
+  largeur = love.graphics.getWidth()/scaleZoom
+  hauteur = love.graphics.getHeight()/scaleZoom
+  
+  -- Caractéristiques de Kirk
+  Kirk.image = love.graphics.newImage("kirk.png")
+  Kirk.h = Kirk.image:getHeight()
+  Kirk.l = Kirk.image:getWidth()
+  Kirk.x = math.floor(largeur/2) - Kirk.l/2
+  Kirk.y = math.floor(hauteur/2) - Kirk.h/2
+  
+  -- Caractéristiques de l'aura de téléportation
+  Kirk.scaleAura = 3
+  Kirk.animScaleAura = 2.5
+  Kirk.xAura = Kirk.x - (Kirk.l/2) * (Kirk.scaleAura - 1)
+  Kirk.yAura = Kirk.y - (Kirk.h/2) * (Kirk.scaleAura - 1)
+
+  --love.audio.play(sndTransporter)
+  
+end
+--
+
+
+
+function love.update(dt)
+  
+-- Gestion de la téléportation
+
+-- Délai avant nouvelle téléportation
+Kirk.beamDelay = Kirk.beamDelay - 1 * dt
+if Kirk.beamDelay <= 0 then
+  Kirk.beamDelay = 0
+end
+
+-- Disparition de Kirk 
+if Kirk.isBeam then
+  -- Aura de téléportation
+  Kirk.scaleAura = 2
+  Kirk.Aura = true
+  Kirk.beamLevel = Kirk.beamLevel - Kirk.beamRate * 60 * dt
+  -- Si Kirk a totalement disparu
+  if Kirk.beamLevel < 0 then
+  -- Effectuer la téléportation
+    if love.keyboard.isDown("left") then
+      Kirk.x = Kirk.x - Kirk.beamRange
+    end
+    if love.keyboard.isDown("right") then
+      Kirk.x = Kirk.x + Kirk.beamRange
+    end
+    if love.keyboard.isDown("up") then
+      Kirk.y = Kirk.y - Kirk.beamRange
+    end
+    if love.keyboard.isDown("down") then
+      Kirk.y = Kirk.y + Kirk.beamRange
+    end
+    Kirk.beamLevel = 0
+    Kirk.beamDelay = Kirk.beamDelayMax
+    Kirk.isBeam = false
+  end
+end
+
+
+-- Réapparition de Kirk
+if Kirk.isBeam == false and Kirk.beamLevel < 100 then
+  Kirk.beamLevel = Kirk.beamLevel + Kirk.beamRate * 60 * dt
+  if Kirk.beamLevel >= 100 then
+    Kirk.Aura = false
+    Kirk.scaleAura = 3
+    Kirk.beamLevel = 100
+  end
+end  
+
+
+-- En boucle, affiche 10 à 60% de pixels sur l'aura de téléportation
+if Kirk.Aura == true then
+  Kirk.auraLevel = Kirk.auraLevel + Kirk.animScaleAura
+  if Kirk.auraLevel <= 10 then
+    Kirk.auraLevel = 10
+    Kirk.animScaleAura = 0 - Kirk.animScaleAura
+  end
+  if Kirk.auraLevel >= 60 then
+    Kirk.auraLevel = 60
+    Kirk.animScaleAura = 0 - Kirk.animScaleAura
+  end
+end
+
+-- Déplacement de Kirk
+if Kirk.isBeam == false then
+  if love.keyboard.isDown("left") == true then
+    Kirk.x = Kirk.x - 1
+  end
+  if love.keyboard.isDown("right") == true then
+    Kirk.x = Kirk.x + 1
+  end
+  if love.keyboard.isDown("up") == true then
+    Kirk.y = Kirk.y - 1
+  end
+  if love.keyboard.isDown("down") == true then
+    Kirk.y = Kirk.y + 1
+  end
+
+-- Téléportation de Kirk
+if Kirk.beamDelay == 0 then
+  
+  if love.keyboard.isDown("left") and love.keyboard.isDown("t") then
+    Kirk.isBeam = true
+  end
+  if love.keyboard.isDown("right") and love.keyboard.isDown("t") then
+    Kirk.isBeam = true
+  end
+  if love.keyboard.isDown("up") and love.keyboard.isDown("t") then
+    Kirk.isBeam = true
+  end
+  if love.keyboard.isDown("down") and love.keyboard.isDown("t") then
+    Kirk.isBeam = true
+  end
+  
+end
+  
+end
+
+
+-- Déplacement de l'Aura de Kirk
+Kirk.xAura = Kirk.x - (Kirk.l/2) * (Kirk.scaleAura - 1)
+Kirk.yAura = Kirk.y - (Kirk.h/2) * (Kirk.scaleAura - 1)
+
+end
+--
+
+
+
+-- Crée un masque
+local mask_shader = love.graphics.newShader[[
+   vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
+      if (Texel(texture, texture_coords).rgba == vec4(0.0)) {
+         // a discarded pixel wont be applied as the stencil.
+         discard;
+      }
+      return vec4(1.0);
+   }
+]]
+
+-- Applique le masque selon les conditions de la fonction précédente + paramètres du draw
+local function myStencilFunction()
+  love.graphics.setShader(mask_shader)
+  love.graphics.draw(Kirk.image,Kirk.xAura,Kirk.yAura,0,Kirk.scaleAura,Kirk.scaleAura)
+  love.graphics.setShader()
+end
+--
+
+
+
+function love.draw()
+  
+love.graphics.scale(scaleZoom, scaleZoom)
+
+-- Affichage de Kirk 
+love.graphics.setColor(255/255,255/255,255/255,(Kirk.beamLevel/100))
+love.graphics.draw(Kirk.image,Kirk.x,Kirk.y)
+
+-- Pourcentage d'apparition de l'aura
+local percentAura = Kirk.auraLevel/100
+
+-- Proportion de la zone de l'image remplie
+local nbPoints = (Kirk.l*Kirk.h*Kirk.scaleAura) * percentAura
+
+love.graphics.stencil(myStencilFunction,"replace",1)
+love.graphics.setStencilTest("greater",0)
+
+love.graphics.setColor(255/255,255/255,255/255,1)
+
+
+-- Gestion de l'aura (pattern aléatoire) 
+local np
+if Kirk.Aura == true then
+  for np = 1, nbPoints do
+  -- coordonnées du pixel dessiné
+    local rx,ry = math.random(Kirk.x-Kirk.l,Kirk.x+(Kirk.l*2)), math.random(Kirk.y-Kirk.h,Kirk.y+(Kirk.h*2))
+    love.graphics.rectangle("fill",rx,ry,1,1)
+  end
+end
+
+love.graphics.setStencilTest()
+
+
+------------------
+-- Infos diverses
+-----------------
+
+-- Remise à l'échelle pour les affichages
+love.graphics.scale(1/scaleZoom,1/scaleZoom)
+
+love.graphics.print("t : teleportation",5,0)
+love.graphics.print("space : shield",5,15)
+
+-- Délai téléportation
+if Kirk.beamDelay > 0 then
+  love.graphics.print("Teleportation delay : "..tostring(math.floor(Kirk.beamDelay+1)),largeur*2,0,0,2,2)
+end
+
+end
+--
+  
+
+--
+function love.keypressed(key)
+  
+print(key)
+  
+-- Activation du bouclier
+if key == "space" then
+  if Kirk.Aura == false then
+    Kirk.Aura = true
+  elseif Kirk.Aura == true then
+    Kirk.Aura = false
+  end
+end
+
+  
+end
